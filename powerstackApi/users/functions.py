@@ -39,11 +39,6 @@ USERS_TABLE = 'powerstackUsers'
 PURCHASE_TABLE = 'powerstackPurchases'
 TICKETS_TABLE = 'powerstackTickets'
 
-# ZAINBOX INFO
-ZAINBOX = '_1WtKh9kPutzOHvj473TQ'
-ZAIN_URL = 'https://sandbox.zainpay.ng/zainbox/card/initialize/payment'
-ZAIN_KEY = 'eyJ0eXAiOiJKV1QiLCJhbGciOiJIUzI1NiJ9.eyJpc3MiOiJodHRwczovL3phaW5wYXkubmciLCJpYXQiOjE3MDA3NzUwMzIsImlkIjpjYmE2MWU0ZC1mMTA0LTRiYTItYTE4NS02MmM0ZjA5NmMxYzAsIm5hbWUiOnBvd2Vyc3RhY2tsdGRAZ21haWwuY29tLCJyb2xlIjpwb3dlcnN0YWNrbHRkQGdtYWlsLmNvbSwic2VjcmV0S2V5IjpnVTZ4c2tFekZSWEdzYXo0c05SWkdoQ1hVNlpwY1Zrcm1vb05pcHp2Q01tSGh9.5RRbBMQ7UXtR4f2cDmHRRfqhgYUwYqRM1PrufotdZhE'
-
 # ---------- FEES (SERVICE & MERCHANT COMMISSION) ----------
 SERVICE = 100
 COMMISSION = 0.01 # 1%

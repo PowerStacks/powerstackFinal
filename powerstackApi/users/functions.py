@@ -5,7 +5,7 @@ import logging
 import json
 
 from decimal import Decimal
-from botocore.exceptions import ClientError
+from botocore.exceptions import ClientError, 
 from utils.utils import *
 from utils.db_utils import * 
 from utils.payment_utils import *
@@ -67,6 +67,12 @@ def user_login(data):
             return 'Your account has been deactivated contact customer service for assistance.'
         else:
             return {'idToken': id_token, 'dashboard': user_info}
+    except ClientError as e:
+        error_type = e.response['Error']['Code']
+        if error_type == 'NotAuthorizedException':
+            raise Exception(f"{error_type}: Invalid username or password")
+        if error_type == 'UserNotFoundException':
+            raise Exception(f"{error_type}: Invalid username / user does not exist")
     except Exception as e:
         raise Exception(str(e))
     
@@ -77,7 +83,7 @@ def user_signup(data):
 
     Args:
         data : username (can make this same as email ), password, email, phone_number, 
-        user_type (depending on page they are signing up on)
+        user_type (depending on page they are signing up on), full_name
 
     Returns:
         JSON : Success / Error msg
@@ -88,12 +94,14 @@ def user_signup(data):
         email = data.get('email')
         phone_number = data.get('phone_number')
         user_type = data.get('user_type')
+        full_name = data.get('full_name')
 
         # Create the user
         user_attributes = [
             {'Name': 'email', 'Value': email},
             {'Name': 'phone_number', 'Value': phone_number},
-            {'Name': 'custom:userType', 'Value': user_type}
+            {'Name': 'custom:userType', 'Value': user_type},
+            {'Name': 'custom:fullName', 'Value': full_name},
         ]
 
         response = COGNITO_CLIENT.sign_up(
@@ -139,7 +147,6 @@ def confirm_sign_up(data):
         user_check(id_token)
 
         return {'message': 'Sign-up confirmed and user authenticated successfully', 'idToken': id_token}
-
     except Exception as e:
         raise Exception(str(e))
     
@@ -241,6 +248,7 @@ def user_check(id_token):
         email = decoded_token['email']
         phone_number = decoded_token.get('phone_number', None)
         user_type = decoded_token.get('custom:userType', None)
+        full_name = decoded_token.get('cutom:fullName', None)
         
         if check_item_exists(USERS_TABLE, 'email', email):
             user = get_items_by_attribute(USERS_TABLE, 'email', email)[0]
@@ -257,6 +265,7 @@ def user_check(id_token):
                 'phoneNumber': phone_number,
                 'email': email,
                 'userType': user_type,
+                'fullNamw': full_name,
                 'isActive': True,
                 'lastLogin': format_date_time('Africa/Lagos'),
                 'walletBalance': 0,

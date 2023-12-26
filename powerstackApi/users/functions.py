@@ -5,7 +5,7 @@ import logging
 import json
 
 from decimal import Decimal
-from botocore.exceptions import ClientError, 
+from botocore.exceptions import ClientError
 from utils.utils import *
 from utils.db_utils import * 
 from utils.payment_utils import *
@@ -29,10 +29,10 @@ logger.setLevel(logging.INFO)
 
 # ---------- GLOBALS ----------
 POOL_SECRET = json.loads(get_secret('powerstack_pool', 'us-east-2'))
-logger.info(POOL_SECRET)
 COGNITO_CLIENT = boto3.client('cognito-idp')
 USER_POOL_ID = POOL_SECRET["powerstack_pool_id"]
 USER_CLIENT_ID = POOL_SECRET["powerstack_client_id"]
+USER_CLIENT_SECRET = POOL_SECRET["powerstack_client_secret"]
 
 # ---------- DATABASE TABLES ----------
 USERS_TABLE = 'powerstackUsers'
@@ -94,14 +94,37 @@ def user_signup(data):
         email = data.get('email')
         phone_number = data.get('phone_number')
         user_type = data.get('user_type')
-        full_name = data.get('full_name')
+        first_name = data.get('first_name')
+        last_name = data.get('last_name')
+
+        # Delete unconfirmed user if any
+        unconfirmed_list = get_unconfirmed_users(USER_POOL_ID, COGNITO_CLIENT)
+        email_unconfirmed = any(user_dict['Email'] == email for user_dict in unconfirmed_list)
+        if email_unconfirmed:
+            for user_dict in unconfirmed_list:
+                if email == user_dict['Email']:
+                    delete_user(USER_POOL_ID, user_dict['Username'], COGNITO_CLIENT)
+
+        # Check if a user with the same email already exists
+        existing_user = None
+        existing_user = get_user_by_email(email, COGNITO_CLIENT, USER_POOL_ID)
+
+        logger.info(existing_user)
+        if existing_user:
+            user_status = existing_user['user_status']
+            if user_status == 'CONFIRMED':
+                return {'message': 'User with the same email exists, redirect to login page'}
+
+        # Calculate the SECRET_HASH
+        secret_hash = calculate_secret_hash(username, USER_CLIENT_ID, USER_CLIENT_SECRET)
 
         # Create the user
         user_attributes = [
             {'Name': 'email', 'Value': email},
             {'Name': 'phone_number', 'Value': phone_number},
             {'Name': 'custom:userType', 'Value': user_type},
-            {'Name': 'custom:fullName', 'Value': full_name},
+            {'Name': 'given_name', 'Value': first_name},
+            {'Name': 'family_name', 'Value': last_name},
         ]
 
         response = COGNITO_CLIENT.sign_up(
@@ -109,10 +132,11 @@ def user_signup(data):
             Username=username,
             Password=password,
             UserAttributes=user_attributes,
+            SecretHash=secret_hash
         )
         logger.info(response)
 
-        return "User created successfully"
+        return {"message": "User created successfully"}
     
     except Exception as e:
         raise Exception(str(e))
@@ -123,7 +147,7 @@ def confirm_sign_up(data):
     Once verification is sent to sign up email, confirms user sign up, get's id token and creates user in DB
 
     Args:
-        data : username, verification_code, password
+        data : username, verification_code
 
     Returns:
         JSON : Status msg / IdToken
@@ -132,16 +156,18 @@ def confirm_sign_up(data):
         username = data.get('username')
         verification_code = data.get('verification_code')
         password = data.get('password')
-
+        secret_hash = calculate_secret_hash(username, USER_CLIENT_ID,USER_CLIENT_SECRET)
         # Confirm user sign up
-        response = COGNITO_CLIENT.confirm_sign_up(
+        COGNITO_CLIENT.confirm_sign_up(
             ClientId=USER_CLIENT_ID,
             Username=username,
-            ConfirmationCode=verification_code
+            ConfirmationCode=verification_code,
+            SecretHash=secret_hash
         )
 
-        # Authenticate the user and get the ID token
+        # Get an ID token
         id_token = get_id_token(username, password)
+
 
         # Create the user in DB
         user_check(id_token)
@@ -215,11 +241,37 @@ def get_id_token(username, password):
         string : id_token
     """
     try:
+        # Check if user unconfirmed / redirect to sign up
+        unconfirmed_list = get_unconfirmed_users(USER_POOL_ID, COGNITO_CLIENT)
+
+        # Check if the identifier is an email
+        is_email = '@' in username
+        if is_email:
+            # Check if email unconfirmed
+            email_unconfirmed = any(user_dict['Email'] == username for user_dict in unconfirmed_list)
+            if email_unconfirmed:
+                raise Exception("User sign up incomplete, return to sign up page.")
+            
+            user_attributes = get_user_by_email(username, COGNITO_CLIENT, USER_POOL_ID)
+            if user_attributes is None:
+                raise ValueError(f"User not found, check your email / username.")
+            else:
+                username = user_attributes.get('username')
+        else:
+            # Check if username unconfirmed
+            username_unconfirmed = any(user_dict['Username'] == username for user_dict in unconfirmed_list)
+            if username_unconfirmed:
+                raise Exception("User sign up incomplete, return to sign up page.")
+            
+        # Calculate the SECRET_HASH
+        secret_hash = calculate_secret_hash(username, USER_CLIENT_ID, USER_CLIENT_SECRET)
+
         auth_response = COGNITO_CLIENT.initiate_auth(
             AuthFlow='USER_PASSWORD_AUTH',
             AuthParameters={
                 'USERNAME': username,
-                'PASSWORD': password
+                'PASSWORD': password,
+                'SECRET_HASH': secret_hash
             },
             ClientId=USER_CLIENT_ID
         )
@@ -248,7 +300,8 @@ def user_check(id_token):
         email = decoded_token['email']
         phone_number = decoded_token.get('phone_number', None)
         user_type = decoded_token.get('custom:userType', None)
-        full_name = decoded_token.get('cutom:fullName', None)
+        first_name = decoded_token.get('given_name', None)
+        last_name = decoded_token.get('family_name', None)
         
         if check_item_exists(USERS_TABLE, 'email', email):
             user = get_items_by_attribute(USERS_TABLE, 'email', email)[0]
@@ -265,7 +318,8 @@ def user_check(id_token):
                 'phoneNumber': phone_number,
                 'email': email,
                 'userType': user_type,
-                'fullNamw': full_name,
+                'firstName': first_name,
+                'lastName': last_name,
                 'isActive': True,
                 'lastLogin': format_date_time('Africa/Lagos'),
                 'walletBalance': 0,

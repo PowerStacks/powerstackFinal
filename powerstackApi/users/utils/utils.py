@@ -3,6 +3,7 @@ import json
 import pytz
 import jwt
 import logging
+import re
 import hashlib, hmac, base64
 
 from datetime import datetime, timezone
@@ -11,6 +12,7 @@ from botocore.exceptions import ClientError
 # ---------- LOGS ----------
 logger = logging.getLogger()
 logger.setLevel(logging.INFO)
+
 
 def format_date_time(timezone_id):
     time_zone = pytz.timezone(timezone_id)
@@ -49,8 +51,6 @@ def get_secret(secret_name, region_name):
     return secret
 
 def calculate_secret_hash(username, client_id, client_secret):
-
-
     message = username + client_id
     dig = hmac.new(str(client_secret).encode('utf-8'), 
                    msg=str(message).encode('utf-8'), 
@@ -80,6 +80,7 @@ def get_user_by_email(email, client, pool_id):
     except Exception as e:
         raise Exception(str(e))
     
+
 def get_unconfirmed_users(user_pool_id, client):
     try:
         response = client.list_users(
@@ -95,6 +96,7 @@ def get_unconfirmed_users(user_pool_id, client):
         print(f"An error occurred: {str(e)}")
         return None
     
+
 def delete_user(user_pool_id, username, client):
     try:
         client.admin_delete_user(

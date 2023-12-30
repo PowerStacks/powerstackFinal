@@ -2,6 +2,7 @@ import json
 import logging
 
 from utils.utils import *
+from utils.exception_handler import *
 from functions import * 
 
 # ---------- LOGS ----------
@@ -21,27 +22,31 @@ def lambda_handler(event, context):
     status_code = 400
 
     if "httpMethod" in event:
-        # ---------- SECTION 1: AUTH HEADER ----------
-        if 'headers' in event and 'Authorization' in event['headers']:
-            id_token = event['headers']['Authorization'].split()[1]
-
-            decoded_token = decode_token(id_token)
-            logger.info(decoded_token)
-            if decoded_token == "Expired":
-                return {
-                    "statusCode": 403,
-                    "headers": {
-                        'Access-Control-Allow-Headers': 'Content-Type',
-                        'Access-Control-Allow-Origin': '*',
-                        'Access-Control-Allow-Methods': 'OPTIONS,POST,GET',
-                        "Content-type": 'application/json'
-                    },
-                    "body": json.dumps({'error': 'Session expired, log in again'})
-                }
-     
         try:
             http_method = event["httpMethod"]
             path = event["path"]
+
+            # ---------- SECTION 1: AUTH HEADER ----------
+            if 'headers' in event and 'Authorization' in event['headers']:
+                id_token = event['headers']['Authorization'].split()[1]
+
+                decoded_token = decode_token(id_token)
+                logger.info(decoded_token)
+                if decoded_token == "Expired":
+                    return {
+                        "statusCode": 403,
+                        "headers": {
+                            'Access-Control-Allow-Headers': 'Content-Type',
+                            'Access-Control-Allow-Origin': '*',
+                            'Access-Control-Allow-Methods': 'OPTIONS,POST,GET',
+                            "Content-type": 'application/json'
+                        },
+                        "body": json.dumps({
+                            'code': 'ExpiredToken',
+                            'message':'Session expired, log in again'
+                            })
+                    }
+            
             # ---------- SECTION 2: OPTIONS REQUESTS ----------
             if http_method == "OPTIONS":
                 return {
@@ -145,6 +150,12 @@ def lambda_handler(event, context):
                 status_code = 200
                 response_body = message
 
+        except CustomException as e:
+        # Handle your custom exception and return the custom error response
+            logger.error(f"Custom Exception {e}")
+            status_code=400
+            response_body = {"code": e.code, "message": e.message}
+        
         except Exception as e:
             logger.error(f"Unhandled Exception {e}")
             status_code = 400

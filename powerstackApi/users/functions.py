@@ -3,12 +3,14 @@ import requests
 import boto3
 import logging
 import json
+import random
 
 from decimal import Decimal
 from botocore.exceptions import ClientError
 from utils.utils import *
 from utils.db_utils import * 
 from utils.payment_utils import *
+from utils.exception_handler import *
 
 
 """
@@ -64,18 +66,11 @@ def user_login(data):
 
         user_info = user_check(id_token)
         if user_info['user_info']['isActive'] is False:
-            return 'Your account has been deactivated contact customer service for assistance.'
+            raise AccountDeactivatedException
         else:
-            return {'idToken': id_token, 'dashboard': user_info}
-    except ClientError as e:
-        error_type = e.response['Error']['Code']
-        if error_type == 'NotAuthorizedException':
-            raise Exception(f"{error_type}: Invalid username or password")
-        if error_type == 'UserNotFoundException':
-            raise Exception(f"{error_type}: Invalid username / user does not exist")
+            return {'idToken': id_token, 'dashboard': user_info} 
     except Exception as e:
-        raise Exception(str(e))
-    
+        error_format(e)
 
 def user_signup(data):
     """
@@ -113,7 +108,7 @@ def user_signup(data):
         if existing_user:
             user_status = existing_user['user_status']
             if user_status == 'CONFIRMED':
-                return {'message': 'User with the same email exists, redirect to login page'}
+                raise AccountExistsException
 
         # Calculate the SECRET_HASH
         secret_hash = calculate_secret_hash(username, USER_CLIENT_ID, USER_CLIENT_SECRET)
@@ -137,9 +132,8 @@ def user_signup(data):
         logger.info(response)
 
         return {"message": "User created successfully"}
-    
     except Exception as e:
-        raise Exception(str(e))
+        error_format(e)
 
 
 def confirm_sign_up(data):
@@ -172,9 +166,12 @@ def confirm_sign_up(data):
         # Create the user in DB
         user_check(id_token)
 
-        return {'message': 'Sign-up confirmed and user authenticated successfully', 'idToken': id_token}
+        return {
+            'message': 'Sign-up confirmed and user authenticated successfully', 
+            'idToken': id_token
+            }
     except Exception as e:
-        raise Exception(str(e))
+        error_format(e)
     
 
 def forgot_password_request(data):
@@ -190,15 +187,25 @@ def forgot_password_request(data):
     try:
         username_or_email = data.get('username')
 
+        is_email = '@' in username_or_email
+        if is_email:
+            user_attributes = get_user_by_email(username_or_email, COGNITO_CLIENT, USER_POOL_ID)
+            if user_attributes is None:
+                raise UserNotFoundException
+            else:
+                username_or_email = user_attributes.get('username')
+
+        secret_hash = calculate_secret_hash(username_or_email, USER_CLIENT_ID,USER_CLIENT_SECRET)
         response = COGNITO_CLIENT.forgot_password(
             ClientId=USER_CLIENT_ID,
-            Username=username_or_email
+            Username=username_or_email,
+            SecretHash=secret_hash
         )
 
         logger.info(response)
         return {'message': 'Password reset code sent successfully'}
     except Exception as e:
-        raise Exception(str(e))
+        error_format(e)
 
 
 def reset_password(data):
@@ -216,17 +223,27 @@ def reset_password(data):
         verification_code = data.get('verification_code')
         new_password = data.get('new_password')
 
+        is_email = '@' in username
+        if is_email:
+            user_attributes = get_user_by_email(username, COGNITO_CLIENT, USER_POOL_ID)
+            if user_attributes is None:
+                raise UserNotFoundException
+            else:
+                username = user_attributes.get('username')
+
+        secret_hash = calculate_secret_hash(username, USER_CLIENT_ID,USER_CLIENT_SECRET)
         response = COGNITO_CLIENT.confirm_forgot_password(
             ClientId=USER_CLIENT_ID,
             Username=username,
             ConfirmationCode=verification_code,
-            Password=new_password
+            Password=new_password,
+            SecretHash=secret_hash
         )
 
         logger.info(response)
         return {'message': 'Password reset successfully'}
     except Exception as e:
-        raise Exception(str(e))
+        error_format(e)
 
 
 def get_id_token(username, password):
@@ -250,18 +267,18 @@ def get_id_token(username, password):
             # Check if email unconfirmed
             email_unconfirmed = any(user_dict['Email'] == username for user_dict in unconfirmed_list)
             if email_unconfirmed:
-                raise Exception("User sign up incomplete, return to sign up page.")
+                raise IncompleteSignupException
             
             user_attributes = get_user_by_email(username, COGNITO_CLIENT, USER_POOL_ID)
             if user_attributes is None:
-                raise ValueError(f"User not found, check your email / username.")
+                raise UserNotFoundException
             else:
                 username = user_attributes.get('username')
         else:
             # Check if username unconfirmed
             username_unconfirmed = any(user_dict['Username'] == username for user_dict in unconfirmed_list)
             if username_unconfirmed:
-                raise Exception("User sign up incomplete, return to sign up page.")
+                raise IncompleteSignupException
             
         # Calculate the SECRET_HASH
         secret_hash = calculate_secret_hash(username, USER_CLIENT_ID, USER_CLIENT_SECRET)
@@ -278,7 +295,7 @@ def get_id_token(username, password):
         id_token = auth_response['AuthenticationResult']['IdToken']
         return id_token
     except Exception as e:
-        raise Exception(str(e))
+        error_format(e)
     
     
 # ---------- SECTION 2: GENERAL FUNCTIONS ----------
@@ -329,7 +346,7 @@ def user_check(id_token):
             insert_data(USERS_TABLE, user_attributes)
             return {'message': 'User added to database.'}
     except Exception as e:
-        raise Exception(str(e))
+        error_format(e)
     
 
 
@@ -357,7 +374,7 @@ def purchase_history(id_token):
         purchase_list = get_items_by_attribute(PURCHASE_TABLE, email_attr, email)
         return {'purchases': str(purchase_list)}
     except Exception as e:
-        raise Exception(str(e))
+        error_format(e)
     
 
 
@@ -399,7 +416,7 @@ def add_meter(id_token, data):
         return {'message': 'Meter info saved.'}
 
     except Exception as e:
-        raise Exception(str(e))
+        error_format(e)
     
 
 def remove_meter(id_token, data):
@@ -432,7 +449,7 @@ def remove_meter(id_token, data):
         return {'message': 'Meter removed!'}
     
     except Exception as e:
-        raise Exception(str(e))
+        error_format(e)
     
 
 def submit_ticket(id_token, data):
@@ -467,7 +484,7 @@ def submit_ticket(id_token, data):
         # trigger email here
         return {'message': f'Ticket ID: {ticket_id}'}
     except Exception as e:
-        raise Exception(str(e))
+        error_format(e)
 
 
 def get_receipt(id_token, query_params):
@@ -490,7 +507,7 @@ def get_receipt(id_token, query_params):
 
         return {'message': 'Receipt retrieved', 'transaction_data': receipt}
     except Exception as e:
-        raise Exception(str(e))
+        error_format(e)
 
 
 # ---------- SECTION 3: PAYMENT ----------
@@ -519,7 +536,7 @@ def initialize_pay_with_platform(id_token, data):
         email = data.get("email")
         phone_number = data.get('phone_number')
         amount = data.get("amount")
-        tx_type = data.get('txnType')
+        tx_type = data.get('txn_type')
         platform = data.get('platform')
         meter_number = data.get('meter_number')
         meter_type = data.get('meter_type'),
@@ -540,7 +557,7 @@ def initialize_pay_with_platform(id_token, data):
         response = paystack_init_payment(email, amount, tx_ref, metadata)
         return response
     except Exception as e:
-        raise Exception(str(e))
+        error_format(e)
 
 
 def confirm_pay_with_platform(id_token, query_params):
@@ -579,9 +596,6 @@ def confirm_pay_with_platform(id_token, query_params):
                 "phoneNumber": phone_number,
                 "purchaseDate": transaction_date,
                 "platform": platform,
-                "meterNumber": meter_number,
-                #"meterType": meter_type,
-                #"location": location,
                 "txnType": tx_type
             }
 
@@ -591,6 +605,13 @@ def confirm_pay_with_platform(id_token, query_params):
                 purchase_data['units'] = Decimal(unit_amount)
                 purchase_data['serviceFee'] = SERVICE
                 purchase_data['platformFees'] = platform_fees
+                purchase_data['meterNumber'] = meter_number
+                #purchase_data['meterType'] = meter_type
+                #purchase_data['location'] = location
+
+                # TODO: remove (temporary)
+                token = random.randint(10**11, (10**12)-1)
+                purchase_data['token'] = token
             
             else:
                 ## Funding wallets  (leave amount as is will take out fees when purchasing from wallet)
@@ -608,19 +629,23 @@ def confirm_pay_with_platform(id_token, query_params):
             if check_value_in_table(PURCHASE_TABLE, "purchaseID", tx_ref) == False:
                 insert_data(PURCHASE_TABLE, purchase_data)
             else:
-                return {'message': "Transaction already stored"}
+                receipt = get_items_by_attribute(PURCHASE_TABLE, 'purchaseID', tx_ref)[0]
+                return {'message': "Transaction already stored", 'receipt': receipt}
 
-            #TODO: Vend tokens here
-
+            #TODO: Vend tokens here if buying then update the purchase
+        
             ## Return receipts    
             receipt = get_items_by_attribute(PURCHASE_TABLE, 'purchaseID', tx_ref)[0]  
             logger.info(receipt)                                                      
                                   
             return {'message': 'Payment successful!', 'transaction_data': receipt}
         else:
-            return {'message': response.get('message')}
+            raise CustomException(
+                code='PaymentConfirmation',
+                message= response.get('message')
+            )
     except Exception as e:
-        raise Exception(str(e))
+        error_format(e)
 
 
 def pay_with_wallet(id_token, data):
@@ -693,6 +718,6 @@ def pay_with_wallet(id_token, data):
 
         return {'message': f'{receipt}'}
     except Exception as e:
-        raise Exception(str(e)) 
+        error_format(e)
     
 # ---------- SECTION 4: VENDING ----------

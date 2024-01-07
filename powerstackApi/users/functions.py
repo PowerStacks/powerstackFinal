@@ -372,7 +372,7 @@ def purchase_history(id_token):
         email_attr = 'email'
         email = decoded_token[email_attr] #use email as main query method
         purchase_list = get_items_by_attribute(PURCHASE_TABLE, email_attr, email)
-        return {'purchases': str(purchase_list)}
+        return {'message': purchase_list}
     except Exception as e:
         error_format(e)
     
@@ -487,7 +487,7 @@ def submit_ticket(id_token, data):
         error_format(e)
 
 
-def get_receipt(id_token, query_params):
+def get_receipt(query_params):
     """
     Gets single purchase info from purchase table with txnRef
 
@@ -499,7 +499,7 @@ def get_receipt(id_token, query_params):
         JSON: receipt / error msg
     """
     # TODO: take out idToken here
-    decoded_token = decode_token(id_token)
+    #decoded_token = decode_token(id_token)
     reference = query_params.get('txnRef')
 
     try:
@@ -511,7 +511,7 @@ def get_receipt(id_token, query_params):
 
 
 # ---------- SECTION 3: PAYMENT ----------
-def initialize_pay_with_platform(id_token, data):
+def initialize_pay_with_platform(data):
     """
     Function to initialize payments with diff payment platforms (paystack, flutterwave, zainpay)
     Pass in plaotform from request to select.
@@ -560,7 +560,7 @@ def initialize_pay_with_platform(id_token, data):
         error_format(e)
 
 
-def confirm_pay_with_platform(id_token, query_params):
+def confirm_pay_with_platform(query_params):
     """
         Checks if payment went through, if so:
          - take out fees, manage commissions >  adds payment to our DB > if wallet funds update wallet
@@ -576,19 +576,19 @@ def confirm_pay_with_platform(id_token, query_params):
         data = response.get('data')
         if message == "Verification successful":
             metadata = json.loads(data.get('metadata'))
-            logger.info(metadata)
-            platform_fees = data.get('fees')
+            platform_fees = float(data.get('fees')) / 100 # to Naira from Kobo
             transaction_date = data.get('transaction_date')
-            amount = data.get('amount')
+            amount = float(data.get('amount')) / 100
             
-            email = metadata.get("email")
+            email = data.get("customer").get("email")
+            logger.info(data)
+            logger.info(email)
             phone_number = metadata.get("phone_number")
             platform = metadata.get("platform")
             meter_number = metadata.get("meter_number")
             #meter_type = metadata.get("meter_type")[0]
             #location = metadata.get("location")[0]
             tx_type = metadata.get("tx_type")
-
             purchase_data = {
                 "purchaseID": tx_ref,
                 "amount": Decimal(amount),
@@ -598,13 +598,15 @@ def confirm_pay_with_platform(id_token, query_params):
                 "platform": platform,
                 "txnType": tx_type
             }
+            logger.info(purchase_data)
 
             if tx_type == "Public" or tx_type == "Simple":
                 ## Take out fees from amnt (service fee + platform fee then vend electricity)
+
                 unit_amount = float(amount) - float(SERVICE) - float(platform_fees)
                 purchase_data['units'] = Decimal(unit_amount)
                 purchase_data['serviceFee'] = SERVICE
-                purchase_data['platformFees'] = platform_fees
+                purchase_data['platformFees'] = Decimal(platform_fees)
                 purchase_data['meterNumber'] = meter_number
                 #purchase_data['meterType'] = meter_type
                 #purchase_data['location'] = location
@@ -615,16 +617,18 @@ def confirm_pay_with_platform(id_token, query_params):
             
             else:
                 ## Funding wallets  (leave amount as is will take out fees when purchasing from wallet)
-                decoded_token = decode_token(id_token)
                 user = get_items_by_attribute(USERS_TABLE, 'email', email)[0]
 
                 user_id = user.get('userID')
                 wallet_balance = float(user.get('walletBalance'))
                 new_wallet_balance = Decimal(wallet_balance + float(amount))
                 update_table_item(USERS_TABLE, 'userID', user_id, 'walletBalance', new_wallet_balance)
+
+                purchase_data['wallet_balance'] = new_wallet_balance
                 ## Get wallet amount, add amount to it
                 ## Update user 
             
+            logger.info("GOT here")
             ## Add payment to DB
             if check_value_in_table(PURCHASE_TABLE, "purchaseID", tx_ref) == False:
                 insert_data(PURCHASE_TABLE, purchase_data)
@@ -634,6 +638,7 @@ def confirm_pay_with_platform(id_token, query_params):
 
             #TODO: Vend tokens here if buying then update the purchase
         
+            logger.info("Got here")
             ## Return receipts    
             receipt = get_items_by_attribute(PURCHASE_TABLE, 'purchaseID', tx_ref)[0]  
             logger.info(receipt)                                                      
@@ -642,7 +647,7 @@ def confirm_pay_with_platform(id_token, query_params):
         else:
             raise CustomException(
                 code='PaymentConfirmation',
-                message= response.get('message')
+                message = response.get('message')
             )
     except Exception as e:
         error_format(e)

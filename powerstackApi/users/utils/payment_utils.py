@@ -78,7 +78,7 @@ def paystack_init_payment(email, amount, tx_ref, metadata):
         response = requests.post(PST_INIT_URL,data=json.dumps(data),headers=headers).json()
         logger.info(response)
         return {
-            'authoriztion_url': response.get('data').get('authorization_url'),
+            'authorization_url': response.get('data').get('authorization_url'),
             'txnRef': response.get('data').get('reference')
             }
     except Exception as e:

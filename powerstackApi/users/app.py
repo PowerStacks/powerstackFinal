@@ -31,7 +31,6 @@ def lambda_handler(event, context):
                 id_token = event['headers']['Authorization'].split()[1]
 
                 decoded_token = decode_token(id_token)
-                logger.info(decoded_token)
                 if decoded_token == "Expired":
                     return {
                         "statusCode": 403,
@@ -63,29 +62,45 @@ def lambda_handler(event, context):
                 if path == "/user/hello":
                     message = "Hello World!"
                 
-                if path == "/user/dashboard":
+                elif path == "/user/dashboard":
                     message = user_check(id_token)
        
-                if path == "/user/purchases":
+                elif path == "/user/purchases":
                     message = purchase_history(id_token)
 
-                if path == "/user/receipt" and "queryStringParameters" in event:
+                elif path == "/user/receipt" and "queryStringParameters" in event:
                     """
                         Query Param: 'txnRef'
                     """
                     query_params = event['queryStringParameters']
-                    message = get_receipt(id_token, query_params=query_params)
+                    message = get_receipt(query_params=query_params)
                 
-                if path == "/user/confirmPay" and "queryStringParameters" in event:
+                elif path == "/user/confirmPay" and "queryStringParameters" in event:
                     """
                         Query Param: 'txnRef'
                     """
                     query_params = event['queryStringParameters']
-                    message = confirm_pay_with_platform(id_token, query_params=query_params)
+                    message = confirm_pay_with_platform(query_params=query_params)
  
+                else:
+                # If the path is not recognized, return an error response
+                    return {
+                        "statusCode": 404,
+                        "headers": {
+                            'Access-Control-Allow-Headers': 'Content-Type',
+                            'Access-Control-Allow-Origin': '*',
+                            'Access-Control-Allow-Methods': 'OPTIONS,POST,GET',
+                            "Content-type": 'application/json'
+                        },
+                        "body": json.dumps({
+                            'code': 'InvalidPath',
+                            'message': f'Invalid path: {path}'
+                        })
+                    }
+                
                 logging.info(message)
                 status_code = 200
-                response_body = {'message': message}
+                response_body = message
 
             # ---------- SECTION 4: POST REQUESTS ----------
             if http_method == "POST":
@@ -97,55 +112,71 @@ def lambda_handler(event, context):
                     """
                     message = add_meter(id_token, data)
 
-                if path == "/user/removeMeter":
+                elif path == "/user/removeMeter":
                     """
                         Body: meterName, meterNumber, meterType, meterLocation
                     """
                     message = remove_meter(id_token, data)
         
-                if path == "/user/ticket":
+                elif path == "/user/ticket":
                     """
                         Body: details
                     """
                     message = submit_ticket(id_token, data)
     
-                if path == "/user/initPay":
+                elif path == "/user/initPay":
                     #for both simple and wallet funding transactions
-                    message = initialize_pay_with_platform(id_token, data)
+                    message = initialize_pay_with_platform(data)
     
-                if path == "/user/walletPay":
+                elif path == "/user/walletPay":
                     message = pay_with_wallet(id_token, data)
 
-                if path =="/user/signUp":
+                elif path =="/user/signUp":
                     """
                         Body: username, password, email, phone_number, user_type
                     """
                     message = user_signup(data)
 
-                if path=="/user/verify":
+                elif path=="/user/verify":
                     """
                         Body: username, verification_code, password
                     """
                     message = confirm_sign_up(data)
                 
-                if path=="/user/login":
+                elif path=="/user/login":
                     """
                         Body: username, password
                     """
                     message = user_login(data)
                 
-                if path=="/user/forgotPassword":
+                elif path=="/user/forgotPassword":
                     """
                         Body: username
                     """
                     message = forgot_password_request(data)
 
-                if path=="/user/resetPassword":
+                elif path=="/user/resetPassword":
                     """
                         Body: username, verification_code, new_password
                     """
                     message = reset_password(data)
 
+                else:
+                # If the path is not recognized, return an error response
+                    return {
+                        "statusCode": 404,
+                        "headers": {
+                            'Access-Control-Allow-Headers': 'Content-Type',
+                            'Access-Control-Allow-Origin': '*',
+                            'Access-Control-Allow-Methods': 'OPTIONS,POST,GET',
+                            "Content-type": 'application/json'
+                        },
+                        "body": json.dumps({
+                            'code': 'InvalidPath',
+                            'message': f'Invalid path: {path}'
+                        })
+                    }
+                
                 logging.info(message)
                 status_code = 200
                 response_body = message

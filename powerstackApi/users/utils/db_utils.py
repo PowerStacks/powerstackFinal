@@ -2,6 +2,7 @@ import json
 import boto3
 import uuid
 import requests
+import decimal
 
 from datetime import datetime, timedelta
 from boto3.dynamodb.conditions import Key, Attr
@@ -56,6 +57,9 @@ def get_items_by_attribute(table_name, attribute_name, attribute_value):
     )
 
     items = response.get('Items', [])
+    
+    # Convert decimal values to strings
+    items = [convert_decimal_to_string(item) for item in items]
     return items
 
 
@@ -85,7 +89,7 @@ def check_value_in_table(table_name, attribute_name, attribute_value):
         )
 
         # Check if any items match the filter expression
-        items = response['Items']
+        items = response.get('Items',[])
         return len(items) > 0
     except Exception as e:
         raise Exception(str(e))
@@ -244,3 +248,8 @@ def get_items_by_attribute_and_date_range(table_name, attribute_name, attribute_
 
     items = response.get('Items', [])
     return items
+
+def convert_decimal_to_string(obj):
+    if isinstance(obj, decimal.Decimal):
+        return str(obj)
+    return obj

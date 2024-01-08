@@ -7,6 +7,7 @@ import re
 import hashlib, hmac, base64
 
 from datetime import datetime, timezone
+from utils.exception_handler import *
 from botocore.exceptions import ClientError
 
 # ---------- LOGS ----------
@@ -43,8 +44,8 @@ def get_secret(secret_name, region_name):
         get_secret_value_response = client.get_secret_value(
             SecretId=secret_name
         )
-    except ClientError as e:
-        raise e
+    except Exception as e:
+        error_format(e)
 
     # Decrypts secret using the associated KMS key.
     secret = get_secret_value_response['SecretString']
@@ -78,7 +79,7 @@ def get_user_by_email(email, client, pool_id):
     except client.exceptions.UserNotFoundException:
         return None
     except Exception as e:
-        raise Exception(str(e))
+        error_format(e)
     
 
 def get_unconfirmed_users(user_pool_id, client):
@@ -93,8 +94,7 @@ def get_unconfirmed_users(user_pool_id, client):
         logger.info(unconfirmed_users)
         return unconfirmed_users
     except Exception as e:
-        print(f"An error occurred: {str(e)}")
-        return None
+        error_format(e)
     
 
 def delete_user(user_pool_id, username, client):
@@ -105,4 +105,4 @@ def delete_user(user_pool_id, username, client):
         )
         print(f"User {username} deleted successfully.")
     except Exception as e:
-        print(f"An error occurred while deleting the user: {str(e)}")
+        error_format(e)

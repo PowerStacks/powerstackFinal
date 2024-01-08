@@ -2,6 +2,8 @@ import logging
 import requests
 import json
 
+from utils.exception_handler import *
+
 """
     - Functions needed:
         1. Payment with payment platform - Flutterwave and Zainpay - to init payment
@@ -51,7 +53,7 @@ def flutterwave_init_payment(email, amount, tx_ref):
         response = requests.post(FLW_URL,data,header)
         return f'{response}'
     except Exception as e:
-        return str(e)
+        error_format(e)
 
 
     
@@ -82,7 +84,7 @@ def paystack_init_payment(email, amount, tx_ref, metadata):
             'txnRef': response.get('data').get('reference')
             }
     except Exception as e:
-        raise Exception(str(e))
+        error_format(e)
     
 def paystack_confirm_payment(tx_ref):
     try:
@@ -95,7 +97,7 @@ def paystack_confirm_payment(tx_ref):
         response = requests.get(PST_CONFIRM_URL + tx_ref, headers=headers).json()
         return response
     except Exception as e:
-        raise Exception(str(e))
+        error_format(e)
 
     
 # ---------- SECTION 3: ZAINPAY ----------

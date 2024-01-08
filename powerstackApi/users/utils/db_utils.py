@@ -5,6 +5,7 @@ import requests
 import decimal
 
 from datetime import datetime, timedelta
+from utils.exception_handler import *
 from boto3.dynamodb.conditions import Key, Attr
 
 # ---------- DYNAMO DB CLIENT ----------
@@ -57,7 +58,7 @@ def get_items_by_attribute(table_name, attribute_name, attribute_value):
     )
 
     items = response.get('Items', [])
-    
+
     # Convert decimal values to strings
     items = [convert_decimal_to_string(item) for item in items]
     return items
@@ -92,7 +93,7 @@ def check_value_in_table(table_name, attribute_name, attribute_value):
         items = response.get('Items',[])
         return len(items) > 0
     except Exception as e:
-        raise Exception(str(e))
+        error_format(e)
 
 def check_item_exists(table_name, attribute_name, attribute_value):
     dynamodb_resource = boto3.resource('dynamodb')
@@ -108,7 +109,7 @@ def check_item_exists(table_name, attribute_name, attribute_value):
         else:
             return False
     except Exception as e:
-        raise Exception(str(e))
+        error_format(e)
 
 
 def update_table_item(table_name, primary_key_name, primary_key_value, attribute_name, new_value):
@@ -128,7 +129,7 @@ def update_table_item(table_name, primary_key_name, primary_key_value, attribute
         )
         return "Wallet balance updated"
     except Exception as e:
-        raise Exception(str(e))
+        error_format(e)
 
 
 def add_item_to_list(table_name, primary_key_name, primary_key_value, attribute_name, items_to_add):
@@ -147,7 +148,7 @@ def add_item_to_list(table_name, primary_key_name, primary_key_value, attribute_
         )
         return "Item Added to list"
     except Exception as e:
-        raise Exception(str(e))
+        error_format(e)
 
 
 def remove_item_from_list(table_name, primary_key_name, primary_key_value, attribute_name, item_to_remove):
@@ -172,7 +173,7 @@ def remove_item_from_list(table_name, primary_key_name, primary_key_value, attri
 
         return "Item Removed from list"
     except Exception as e:
-        raise Exception(str(e))
+        error_format(e)
     
     
 def get_item_count(table_name):

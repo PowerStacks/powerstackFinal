@@ -63,18 +63,22 @@ def flutterwave_init_payment(email, amount, tx_ref):
 
 # ---------- SECTION 2: PAYSTACK ----------
 # Paystack Charges 1.5% on each transaction + 100 ( over 2500 )
-def paystack_init_payment(email, amount, tx_ref, metadata):
+def paystack_init_payment(email, amount, tx_ref, metadata, callback_url):
     headers = {
         'Authorization': f'Bearer {PAYSTACK_SECRET_KEY}',
         'content-type': 'application/json'
         }
     
+
     data = {
         "reference": tx_ref,
         "amount": amount, # in kobo
         "email": email,
-        "metadata": json.dumps(metadata)
+        "metadata": json.dumps(metadata), 
+        "callback_url": callback_url
     }
+
+
 
     try:
         response = requests.post(PST_INIT_URL,data=json.dumps(data),headers=headers).json()
@@ -102,5 +106,17 @@ def paystack_confirm_payment(tx_ref):
     
 # ---------- SECTION 3: ZAINPAY ----------
 
-# ---------- SECTION 3: VENDING ( handle prepaid / postpaid here? ) ----------
+# ---------- SECTION 3: VENDING / UTILS( handle prepaid / postpaid here? ) ----------
 #def vend_electricity():
+        
+def service_fee(amount):
+    if amount < 10000:
+        return amount * 0.01
+    else:
+        return 100
+
+def platform_fee(amount):
+    if amount < 2500:
+        return amount * 0.015
+    else:
+        return (amount * 0.015) + 100

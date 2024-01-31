@@ -3,10 +3,16 @@ import boto3
 import uuid
 import requests
 import decimal
+import logging
 
 from datetime import datetime, timedelta
 from utils.exception_handler import *
 from boto3.dynamodb.conditions import Key, Attr
+
+
+# ---------- LOGS ----------
+logger = logging.getLogger()
+logger.setLevel(logging.INFO)
 
 # ---------- DYNAMO DB CLIENT ----------
 dynamodb =  boto3.client('dynamodb')
@@ -159,17 +165,26 @@ def remove_item_from_list(table_name, primary_key_name, primary_key_value, attri
         # Get the existing list
         response = table.get_item(Key={primary_key_name: primary_key_value})
         existing_list = response['Item'].get(attribute_name, [])
+        logger.info(existing_list)
 
-        # Remove the item if it exists in the list
-        if item_to_remove in existing_list:
-            existing_list.remove(item_to_remove)
+       # Remove the item based on 'meterNumber'
+        updated_list = [item for item in existing_list if item.get('meterNumber') != item_to_remove]
+                        
+        logger.info(updated_list)
 
-        # Update the item with the modified list
-        table.update_item(
-            Key={primary_key_name: primary_key_value},
-            UpdateExpression=f'SET {attribute_name} = :newList',
-            ExpressionAttributeValues={':newList': existing_list}
-        )
+
+        if (len(updated_list) != len(existing_list)):
+            # Update the item with the modified list
+            table.update_item(
+                Key={primary_key_name: primary_key_value},
+                UpdateExpression=f'SET {attribute_name} = :newList',
+                ExpressionAttributeValues={':newList': updated_list}
+            )
+        else:
+            raise CustomException(
+                code= 'MeterNotFound',
+                message = "Meter Number: " + item_to_remove
+            )
 
         return "Item Removed from list"
     except Exception as e:

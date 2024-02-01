@@ -23,6 +23,8 @@ from utils.exception_handler import *
     6. docs
     7. future dev > referral codes, whatsapp integration etc
     8. Handle all cases for all functions eg ticket issue, 
+    - start on docs and plan for admin
+    - standardize the purchaseID
 """
 
 # ---------- LOGS ----------
@@ -237,10 +239,7 @@ def get_receipt(query_params):
         if (receipt_list):
             receipt = receipt_list[0]
         else:
-            raise CustomException(
-                code='InvalidReference',
-                message = "The given transaction reference is invalid."
-            )
+            raise InvalidReferenceException
         return {'message': 'Receipt retrieved', 'transaction_data': receipt}
     except Exception as e:
         error_format(e)

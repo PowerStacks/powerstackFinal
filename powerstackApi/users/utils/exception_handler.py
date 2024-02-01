@@ -29,6 +29,14 @@ class IncompleteSignupException(CustomException):
     def __init__(self, message='User sign up incomplete, return to sign up page.'):
         super().__init__(code='IncompleteSignup', message=message)
 
+class InvalidReferenceException(CustomException):
+    def __init__(self, message='The given transaction reference is invalid.'):
+        super().__init__(code='InvalidReference')
+
+class InsufficientBalanceException(CustomException):
+    def __init__(self, message='Insufficient wallet balance, please fund wallet.'):
+        super().__init__(code='InsufficientBalance')
+
 # ---------- SECTION 2: EXCEPTION FORMATTING ----------
 def error_format(e):
     logger.info(e)

@@ -7,6 +7,8 @@ USER_POOL_ID = POOL_SECRET["powerstack_pool_id"]
 USER_CLIENT_ID = POOL_SECRET["powerstack_client_id"]
 USER_CLIENT_SECRET = POOL_SECRET["powerstack_client_secret"]
 
+
+# ---------- AUTH FUNCTIONS ----------
 def user_login(data):
     """
     Handles user log ins, gets idToken from cognito, and returns user info if user is still active.

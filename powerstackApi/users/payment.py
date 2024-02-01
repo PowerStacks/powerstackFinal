@@ -5,6 +5,7 @@ from functions import *
 # ---------- FEES (MERCHANT COMMISSION) ----------
 COMMISSION = 0.01 # 1%
 
+# ---------- PAYMENT FUNCTIONS ----------
 def initialize_pay_with_platform(data):
     """
     Function to initialize payments with diff payment platforms (paystack, flutterwave, zainpay)
@@ -48,7 +49,6 @@ def initialize_pay_with_platform(data):
         tx_ref = str(uuid.uuid4())
 
         #TODO: replace callback url with our domain url
-        #TODO: add the payment id and prelim info to db then update entry in the confirm pay
         # ---------- ADD PAYMENT TO DB ----------
         purchase_data = metadata
         purchase_data["purchaseID"] = tx_ref
@@ -78,6 +78,7 @@ def confirm_pay_with_platform(query_params):
         response = paystack_confirm_payment(tx_ref)
 
         message = response.get('message')
+
         data = response.get('data')
         transaction_status = data.get('status')
 
@@ -89,14 +90,14 @@ def confirm_pay_with_platform(query_params):
             amount = float(data.get('amount')) / 100 # to Naira from Kobo
             transaction_date = data.get('transaction_date')
             email = data.get("customer").get("email")
-            phone_number = metadata.get("phone_number")
 
+            phone_number = metadata.get("phone_number")
             platform = metadata.get("platform")
             meter_number = metadata.get("meter_number")
             meter_type = metadata.get("meter_type")
             location = metadata.get("location")
             tx_type = metadata.get("tx_type")
-            logger.info("HERE")
+
             purchase_data = {
                 "purchaseID": tx_ref,
                 "amount": str(amount),
@@ -122,7 +123,7 @@ def confirm_pay_with_platform(query_params):
                 # TODO: remove (temporary) - replace with token vending here
                 token = random.randint(10**11, (10**12)-1)
                 purchase_data['token'] = token
-                logger.info("HEREE")
+        
 
             # ---------- FUND WALLET ----------
             if tx_type == "Wallet":
@@ -137,8 +138,7 @@ def confirm_pay_with_platform(query_params):
                 update_table_item(USERS_TABLE, 'userID', user_id, 'walletBalance', new_wallet_balance)
 
                 purchase_data['wallet_balance'] = new_wallet_balance
-                logger.info("HERRE")
-            
+        
             # ---------- ADD PAYMENT TO DB ----------
             stored_purchase = get_items_by_attribute(PURCHASE_TABLE, 'purchaseID', tx_ref)[0]
             if stored_purchase.get("status") == "Initialized":
@@ -168,13 +168,13 @@ def pay_with_wallet(id_token, data):
     decoded_token = decode_token(id_token)
     email = decoded_token.get('email')
     phone_number = decoded_token.get('phone_number')
+    user_type = decoded_token.get('custom:userType')
+    
     try:
         user = get_items_by_attribute(USERS_TABLE, 'email', email)[0]
         user_id = user.get('userID')
-        user_type = decoded_token.get('custom:userType')
         wallet_balance = float(user.get('walletBalance'))
-        logger.info("IM here")
-        # METER INFO
+     
         meter_number = data.get('meter_number')
         meter_type = data.get('meter_type')
         location = data.get('meter_location')
@@ -197,7 +197,7 @@ def pay_with_wallet(id_token, data):
 
         unit_amount = amount - service_fee(amount) - platform_fee(amount)
         new_balance = wallet_balance
-        logger.info("Here")
+    
         if wallet_balance >= amount:
             if user_type == 'MERCHANT':
                 customer_contact = data.get('customerContact')
@@ -210,7 +210,7 @@ def pay_with_wallet(id_token, data):
                     
                 commission = COMMISSION * amount
                 new_balance = str(wallet_balance - amount + commission)
-                logger.info("Here 3")
+             
                 #ADD INFO TO PURCHASE
                 purchase_details['units'] = str(unit_amount)
                 purchase_details['serviceFee'] = str(service_fee(amount))
@@ -219,11 +219,10 @@ def pay_with_wallet(id_token, data):
                 purchase_details['customerName'] = customer_name
                 purchase_details['commission'] = str(commission)
                 purchase_details['payment_method'] = "MERCHANT"
-                logger.info("here 4")
+
                 # TODO: remove (temporary) - replace with token vending below
                 token = random.randint(10**11, (10**12)-1)
                 purchase_details['token'] = token
-                logger.info("HEREE")
 
             else:
             
@@ -238,26 +237,24 @@ def pay_with_wallet(id_token, data):
                 # TODO: remove (temporary) - replace with token vending below
                 token = random.randint(10**11, (10**12)-1)
                 purchase_details['token'] = token
-                logger.info("HEREE")
-        else:
-            raise CustomException(
-                code='InsufficientBalance',
-                message = "Insufficient wallet balance, please fund wallet." 
-            )
-        # ---------- UPDATE WALLET ----------
-        update_table_item(USERS_TABLE, 'userID', user_id, 'walletBalance', new_balance)
+        
+            # ---------- UPDATE WALLET ----------
+            update_table_item(USERS_TABLE, 'userID', user_id, 'walletBalance', new_balance)
 
-        # ---------- ADD PAYMENT TO DB ----------
-        if check_value_in_table(PURCHASE_TABLE, "purchaseID", purchase_id) == False:
-                purchase_details["status"] = "Confirmed"
-                insert_data(PURCHASE_TABLE, purchase_details)
-        else:
-            receipt = get_items_by_attribute(PURCHASE_TABLE, 'purchaseID', purchase_id)[0]
-            return {'message': "Transaction already stored", 'receipt': receipt}
+            # ---------- ADD PAYMENT TO DB ----------
+            if check_value_in_table(PURCHASE_TABLE, "purchaseID", purchase_id) == False:
+                    purchase_details["status"] = "Confirmed"
+                    insert_data(PURCHASE_TABLE, purchase_details)
+            else:
+                receipt = get_items_by_attribute(PURCHASE_TABLE, 'purchaseID', purchase_id)[0]
+                return {'message': "Transaction already stored", 'receipt': receipt}
 
-        # ---------- RETURN RECEIPT ----------
-        receipt = get_items_by_attribute(PURCHASE_TABLE, 'purchaseID', purchase_id)[0]                                                                         
-        return {'message': 'Payment successful!', 'transaction_data': receipt}
+            # ---------- RETURN RECEIPT ----------
+            receipt = get_items_by_attribute(PURCHASE_TABLE, 'purchaseID', purchase_id)[0]                                                                         
+            return {'message': 'Payment successful!', 'transaction_data': receipt}
+        
+        else:
+            raise InsufficientBalanceException
 
     except Exception as e:
         error_format(e)

@@ -37,7 +37,9 @@ class InsufficientBalanceException(CustomException):
     def __init__(self, message='Insufficient wallet balance, please fund wallet.'):
         super().__init__(code='InsufficientBalance')
 
-
+class UnauthorizedUser(CustomException):
+    def __init(self, message='Unauthorized user.'):
+        super().__init__(code='UnauthorizedUser')
 
 # ---------- SECTION 2: EXCEPTION FORMATTING ----------
 def error_format(e):

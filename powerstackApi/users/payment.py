@@ -46,8 +46,8 @@ def initialize_pay_with_platform(data):
             "location": location,
         }
 
-        tx_ref = str(uuid.uuid4())
-
+        #tx_ref = str(uuid.uuid4())
+        tx_ref = generate_purchase_id()
         #TODO: replace callback url with our domain url
         # ---------- ADD PAYMENT TO DB ----------
         purchase_data = metadata
@@ -180,7 +180,8 @@ def pay_with_wallet(id_token, data):
         location = data.get('meter_location')
         amount = float(data.get("amount")) / 100
 
-        purchase_id = str(uuid.uuid4())
+    
+        purchase_id = generate_purchase_id()
 
         purchase_details = {
             'purchaseID': purchase_id,

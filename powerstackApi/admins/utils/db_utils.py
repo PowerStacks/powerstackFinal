@@ -1,12 +1,20 @@
 import json
 import boto3
-import uuid
-import requests
+import random
+import decimal
+import logging
 
 from datetime import datetime, timedelta
+from utils.exception_handler import *
+from utils.general_utils import *
 from boto3.dynamodb.conditions import Key, Attr
 
-#Initizializing DynamoDB client
+
+# ---------- LOGS ----------
+logger = logging.getLogger()
+logger.setLevel(logging.INFO)
+
+# ---------- DYNAMO DB CLIENT ----------
 dynamodb =  boto3.client('dynamodb')
 
 def get_all_items(table_name):
@@ -56,6 +64,9 @@ def get_items_by_attribute(table_name, attribute_name, attribute_value):
     )
 
     items = response.get('Items', [])
+
+    # Convert decimal values to strings
+    items = [convert_decimal_to_string(item) for item in items]
     return items
 
 
@@ -85,11 +96,10 @@ def check_value_in_table(table_name, attribute_name, attribute_value):
         )
 
         # Check if any items match the filter expression
-        items = response['Items']
+        items = response.get('Items',[])
         return len(items) > 0
     except Exception as e:
-        print("Error:", e)
-
+        error_format(e)
 
 def check_item_exists(table_name, attribute_name, attribute_value):
     dynamodb_resource = boto3.resource('dynamodb')
@@ -105,7 +115,8 @@ def check_item_exists(table_name, attribute_name, attribute_value):
         else:
             return False
     except Exception as e:
-        print('Error:', e)
+        error_format(e)
+
 
 def update_table_item(table_name, primary_key_name, primary_key_value, attribute_name, new_value):
     try:
@@ -124,8 +135,9 @@ def update_table_item(table_name, primary_key_name, primary_key_value, attribute
         )
         return "Wallet balance updated"
     except Exception as e:
-        return f"An error occurred: {e}"
-    
+        error_format(e)
+
+
 def add_item_to_list(table_name, primary_key_name, primary_key_value, attribute_name, items_to_add):
     try:
         dynamodb_resoure = boto3.resource('dynamodb')
@@ -142,7 +154,7 @@ def add_item_to_list(table_name, primary_key_name, primary_key_value, attribute_
         )
         return "Item Added to list"
     except Exception as e:
-        return f"An error occurred: {e}"
+        error_format(e)
 
 
 def remove_item_from_list(table_name, primary_key_name, primary_key_value, attribute_name, item_to_remove):
@@ -153,21 +165,30 @@ def remove_item_from_list(table_name, primary_key_name, primary_key_value, attri
         # Get the existing list
         response = table.get_item(Key={primary_key_name: primary_key_value})
         existing_list = response['Item'].get(attribute_name, [])
+        logger.info(existing_list)
 
-        # Remove the item if it exists in the list
-        if item_to_remove in existing_list:
-            existing_list.remove(item_to_remove)
+       # Remove the item based on 'meterNumber'
+        updated_list = [item for item in existing_list if item.get('meterNumber') != item_to_remove]
+                        
+        logger.info(updated_list)
 
-        # Update the item with the modified list
-        table.update_item(
-            Key={primary_key_name: primary_key_value},
-            UpdateExpression=f'SET {attribute_name} = :newList',
-            ExpressionAttributeValues={':newList': existing_list}
-        )
+
+        if (len(updated_list) != len(existing_list)):
+            # Update the item with the modified list
+            table.update_item(
+                Key={primary_key_name: primary_key_value},
+                UpdateExpression=f'SET {attribute_name} = :newList',
+                ExpressionAttributeValues={':newList': updated_list}
+            )
+        else:
+            raise CustomException(
+                code= 'MeterNotFound',
+                message = "Meter Number: " + item_to_remove
+            )
 
         return "Item Removed from list"
     except Exception as e:
-        return f"An error occurred: {e}"
+        error_format(e)
     
     
 def get_item_count(table_name):
@@ -183,10 +204,51 @@ def get_item_count(table_name):
     return item_count
 
 
-def sum_attribute_by_date_range(table_name, attribute_name, attribute_value, date_attribute, attribute_to_sum, start_date, end_date):
+def count_records_by_date_range(table_name, date_attribute, start_date, end_date):
     dynamodb = boto3.resource('dynamodb')
     table = dynamodb.Table(table_name)
 
+    start_datetime = datetime.strptime(start_date, '%Y-%m-%d %H:%M')
+    end_datetime = datetime.strptime(end_date, '%Y-%m-%d %H:%M')
+
+    filter_expression = f"{date_attribute} BETWEEN :start_date AND :end_date"
+
+    expression_attribute_values = {
+        ":start_date": start_datetime.strftime('%Y-%m-%d %H:%M'),
+        ":end_date": end_datetime.strftime('%Y-%m-%d %H:%M')
+    }
+
+    response = table.scan(FilterExpression=filter_expression, ExpressionAttributeValues=expression_attribute_values)
+
+    return len(response['Items'])
+
+
+def sum_attribute_by_date_range(table_name, date_attribute, attribute_to_sum, start_date, end_date):
+    dynamodb = boto3.resource('dynamodb')
+    table = dynamodb.Table(table_name)
+
+    start_datetime = datetime.strptime(start_date, '%Y-%m-%d %H:%M')
+    end_datetime = datetime.strptime(end_date, '%Y-%m-%d %H:%M')
+
+    filter_expression = f"{date_attribute} BETWEEN :start_date AND :end_date"
+
+    expression_attribute_values = {
+        ":start_date": start_datetime.strftime('%Y-%m-%d %H:%M'),
+        ":end_date": end_datetime.strftime('%Y-%m-%d %H:%M')
+    }
+
+    response = table.scan(FilterExpression=filter_expression, ExpressionAttributeValues=expression_attribute_values)
+
+    sum_result = sum(float(item[attribute_to_sum]) for item in response['Items']) if response['Items'] else 0
+
+    return sum_result
+
+
+def get_items_by_attribute_and_date_range(table_name, attribute_name, attribute_value, date_attribute, start_date, end_date):
+    dynamodb_resource = boto3.resource('dynamodb')
+    table = dynamodb_resource.Table(table_name)
+
+    # Convert string dates to datetime objects
     start_datetime = datetime.strptime(start_date, '%Y-%m-%d %H:%M')
     end_datetime = datetime.strptime(end_date, '%Y-%m-%d %H:%M')
 
@@ -197,14 +259,27 @@ def sum_attribute_by_date_range(table_name, attribute_name, attribute_value, dat
         ":end_date": end_datetime.strftime('%Y-%m-%d %H:%M'),
         ":attribute_value": attribute_value
     }
-
+    
     response = table.scan(FilterExpression=filter_expression, ExpressionAttributeValues=expression_attribute_values)
 
-    sum_result = sum(float(item[attribute_to_sum]) for item in response['Items']) if response['Items'] else 0
+    items = response.get('Items', [])
+    return items
 
-    return sum_result
+def generate_purchase_id():
+    """ Format: PST-YYMMDDhhmm- random 6 digit number"""
+    pattern = re.compile(r'[^a-zA-Z0-9\s]')
+    purchase_date = pattern.sub('',format_date_time('Africa/Lagos')).replace(" ", "")
+  
+
+    six_digit = str(random.randint(100000, 999999))
+    purchase_id = f'PST-{purchase_date}-{six_digit}'
+    return purchase_id
 
 
+def convert_decimal_to_string(obj):
+    if isinstance(obj, decimal.Decimal):
+        return str(obj)
+    return obj
 
 def analytics(table_name, attribute_name, attribute_value, date_attribute, start_date, end_date):
     dynamodb_resource = boto3.resource('dynamodb')

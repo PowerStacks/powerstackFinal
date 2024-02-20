@@ -23,8 +23,17 @@ from utils.exception_handler import *
     6. docs
     7. future dev > referral codes, whatsapp integration etc
     8. Handle all cases for all functions eg ticket issue, 
-    - start on docs and plan for admin
-    - standardize the purchaseID
+    FRI:
+    - plan for admin
+    - standardize purchaseID - DONE
+    - docs layout
+    SAT:
+    - finish admin docs
+    - api documentation
+    - look into date issue w timezone.
+    SUN:
+    - begin testing deployment
+    - start admin work
 """
 
 # ---------- LOGS ----------

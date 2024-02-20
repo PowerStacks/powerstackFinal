@@ -1,12 +1,12 @@
 import json
 import boto3
-import uuid
-import requests
+import random
 import decimal
 import logging
 
 from datetime import datetime, timedelta
 from utils.exception_handler import *
+from utils.general_utils import *
 from boto3.dynamodb.conditions import Key, Attr
 
 
@@ -265,7 +265,38 @@ def get_items_by_attribute_and_date_range(table_name, attribute_name, attribute_
     items = response.get('Items', [])
     return items
 
+def generate_purchase_id():
+    """ Format: PST-YYMMDDhhmm- random 6 digit number"""
+    pattern = re.compile(r'[^a-zA-Z0-9\s]')
+    purchase_date = pattern.sub('',format_date_time('Africa/Lagos')).replace(" ", "")
+  
+
+    six_digit = str(random.randint(100000, 999999))
+    purchase_id = f'PST-{purchase_date}-{six_digit}'
+    return purchase_id
+
+
 def convert_decimal_to_string(obj):
     if isinstance(obj, decimal.Decimal):
         return str(obj)
     return obj
+
+def analytics(table_name, attribute_name, attribute_value, date_attribute, start_date, end_date):
+    dynamodb_resource = boto3.resource('dynamodb')
+    table = dynamodb_resource.Table(table_name)
+
+    # Convert string dates to datetime objects
+    start_datetime = datetime.strptime(start_date, '%Y-%m-%d %H:%M')
+    end_datetime = datetime.strptime(end_date, '%Y-%m-%d %H:%M')
+
+    filter_expression = f"{date_attribute} BETWEEN :start_date AND :end_date and {attribute_name} = :attribute_value"
+
+    expression_attribute_values = {
+        ":start_date": start_datetime.strftime('%Y-%m-%d %H:%M'),
+        ":end_date": end_datetime.strftime('%Y-%m-%d %H:%M'),
+        ":attribute_value": attribute_value
+    }
+
+    response = table.scan(FilterExpression=filter_expression, ExpressionAttributeValues=expression_attribute_values)
+
+    return response
